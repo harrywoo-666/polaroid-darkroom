@@ -315,6 +315,11 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   flex-wrap:wrap;
 }
 .result-foot .btn{flex:1}
+.result-back{border-color:rgba(255,255,255,.7);background:transparent;color:#fff}
+.frame-image-field{grid-column:1/-1;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:13px;border:2px dashed rgba(32,42,51,.25);border-radius:13px;background:#fff}
+.frame-image-field strong{font-size:13px}
+.frame-image-actions{display:flex;gap:8px;flex-wrap:wrap}
+.frame-image-field .fine{overflow-wrap:anywhere}
 
 .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 22px;border-bottom:2px dashed rgba(32,42,51,.18);background:linear-gradient(180deg,var(--paper),#fbf3e4)}
 .dialog-head h2{font-family:var(--display);font-weight:400;font-size:22px;margin:0;letter-spacing:.02em}
@@ -415,6 +420,8 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   .field.full{grid-column:1}
   .dialog-foot{padding:12px 16px}
   .dialog-foot .btn.sm{padding:9px 16px;font-size:13px}
+  .result-foot .btn{flex:1 1 calc(50% - 10px)}
+  .result-foot .result-back{flex:1 1 100%}
 }
 @media (max-width:400px){
   .brand h1{font-size:19px}
@@ -564,6 +571,16 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
       <label class="field full">所属分组
         <select id="tplGroup"></select>
       </label>
+      <div class="frame-image-field">
+        <strong>上传图片生成边框</strong>
+        <p class="fine">图片将覆盖相框画布，中间照片区会自动挖空；可继续编辑下方文字与图案。</p>
+        <div class="frame-image-actions">
+          <button class="btn sm ghost" type="button" id="frameImageBtn">＋ 选择边框图片</button>
+          <button class="btn sm ghost" type="button" id="frameImageRemove" hidden>移除边框图片</button>
+        </div>
+        <span class="fine" id="frameImageMeta">未选择图片</span>
+        <input type="file" id="frameImageInput" accept="image/*" hidden>
+      </div>
       <div class="field">底色 A
         <div class="color-field"><input type="color" id="tplBg1"><span id="tplBg1Hex"></span></div>
       </div>
@@ -672,6 +689,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
     <img id="resultImg" alt="拍立得照片">
   </div>
   <div class="result-foot">
+    <button class="btn result-back" data-close>← 返回编辑</button>
     <button class="btn" id="resultDownload">下载 PNG 文件</button>
     <button class="btn primary" data-close>完成</button>
   </div>
@@ -740,6 +758,7 @@ const state = {
 
 let editingId = null;
 let draft = null;
+const frameImages = new Map();
 let drag = null;
 let rafId = 0;
 
@@ -777,6 +796,10 @@ const els = {
   editorCanvas: $('editorCanvas'),
   tplName: $('tplName'),
   tplGroup: $('tplGroup'),
+  frameImageBtn: $('frameImageBtn'),
+  frameImageInput: $('frameImageInput'),
+  frameImageRemove: $('frameImageRemove'),
+  frameImageMeta: $('frameImageMeta'),
   tplBg1: $('tplBg1'),
   tplBg2: $('tplBg2'),
   tplBg1Hex: $('tplBg1Hex'),
@@ -851,7 +874,11 @@ function saveState(){
       templates: state.templates,
       currentId: state.currentId
     }));
-  } catch (e) { /* 隐私模式下忽略 */ }
+    return true;
+  } catch (e) {
+    toast('本机存储空间不足，相框未保存；请删除旧模板或缩小图片');
+    return false;
+  }
 }
 function loadState(){
   let loaded = false;
@@ -1394,6 +1421,17 @@ function drawBottom(ctx, tpl, caption){
   drawPokeball(ctx, 30, 26, 11, tpl.accent, .5);
 }
 
+function getFrameImage(tpl){
+  if (!tpl.frameImage) return null;
+  let img = frameImages.get(tpl.frameImage);
+  if (img) return img;
+  img = new Image();
+  img.onload = () => { redrawMain(); refreshThumbs(); drawEditor(); };
+  frameImages.set(tpl.frameImage, img);
+  img.src = tpl.frameImage;
+  return img;
+}
+
 function renderPolaroid(canvas, tpl, opts){
   opts = opts || {};
   if (!canvas || !tpl) return;
@@ -1412,6 +1450,16 @@ function renderPolaroid(canvas, tpl, opts){
 
   drawPattern(ctx, tpl, DW, DH);
   if (tpl.texture) drawGrain(ctx, DW, DH);
+  const frameImage = getFrameImage(tpl);
+  if (frameImage && frameImage.complete && frameImage.naturalWidth) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, DW, DH);
+    ctx.rect(DESIGN.M, DESIGN.M, DESIGN.IMG, DESIGN.IMG);
+    ctx.clip('evenodd');
+    ctx.drawImage(frameImage, 0, 0, DW, DH);
+    ctx.restore();
+  }
 
   // 相纸窗口
   const M = DESIGN.M, IMG = DESIGN.IMG;
@@ -1584,6 +1632,7 @@ function openEditor(id){
     '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'
   ).join('');
   els.tplGroup.value = draft.groupId;
+  updateFrameImageMeta();
   els.tplBg1.value = draft.bg1;
   els.tplBg2.value = draft.bg2;
   els.tplBg1Hex.textContent = draft.bg1.toUpperCase();
@@ -1607,7 +1656,7 @@ function openEditor(id){
 }
 
 function drawEditor(){
-  if (!draft) return;
+  if (!draft || !els.tplDialog.open) return;
   renderPolaroid(els.editorCanvas, draft, {
     image: state.image,
     tf: state.tf,
@@ -1616,19 +1665,65 @@ function drawEditor(){
   });
 }
 
+function updateFrameImageMeta(){
+  els.frameImageMeta.textContent = draft && draft.frameImage ? (draft.frameImageName || '已上传边框图片') : '未选择图片';
+  els.frameImageRemove.hidden = !draft || !draft.frameImage;
+}
+
+function uploadFrameImage(file){
+  if (!draft) return;
+  if (!file.type.startsWith('image/')) { toast('请选择图片文件'); return; }
+  const target = draft;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    if (draft !== target) return;
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = DESIGN.W;
+      cv.height = DESIGN.H;
+      const ctx = cv.getContext('2d');
+      const scale = Math.max(DESIGN.W / img.naturalWidth, DESIGN.H / img.naturalHeight);
+      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+      ctx.drawImage(img, (DESIGN.W - w) / 2, (DESIGN.H - h) / 2, w, h);
+      target.frameImage = cv.toDataURL('image/jpeg', .82);
+      target.frameImageName = file.name;
+      frameImages.set(target.frameImage, imgForFrame(target.frameImage));
+      updateFrameImageMeta();
+      drawEditor();
+      toast('边框图片已载入，中间照片区已挖空');
+    } catch (e) { toast('边框图片处理失败，请换一张图片'); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('图片无法读取，请换一张图片'); };
+  img.src = url;
+}
+
+function imgForFrame(src){
+  const img = new Image();
+  img.onload = () => { redrawMain(); refreshThumbs(); drawEditor(); };
+  img.src = src;
+  return img;
+}
+
 function saveTemplate(){
   if (!draft) return;
   const name = draft.name.trim();
   if (!name) { toast('请给相框取个名字'); els.tplName.focus(); return; }
   draft.name = name;
+  const previousTemplates = state.templates;
+  const previousId = state.currentId;
   if (editingId) {
-    const idx = state.templates.findIndex(t => t.id === editingId);
-    if (idx >= 0) state.templates[idx] = clone(draft);
+    state.templates = state.templates.map(t => t.id === editingId ? clone(draft) : t);
   } else {
-    state.templates.push(clone(draft));
+    state.templates = [...state.templates, clone(draft)];
   }
   state.currentId = draft.id;
-  saveState();
+  if (!saveState()) {
+    state.templates = previousTemplates;
+    state.currentId = previousId;
+    return;
+  }
   renderTemplates();
   updateFrameChip();
   updateCaptionPlaceholder();
@@ -2045,6 +2140,19 @@ function bindEvents(){
   els.manageGroupsBtn2.addEventListener('click', openGroupDialog);
 
   // 模板编辑器字段
+  els.frameImageBtn.addEventListener('click', () => els.frameImageInput.click());
+  els.frameImageInput.addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) uploadFrameImage(file);
+    e.target.value = '';
+  });
+  els.frameImageRemove.addEventListener('click', () => {
+    if (!draft) return;
+    delete draft.frameImage;
+    delete draft.frameImageName;
+    updateFrameImageMeta();
+    drawEditor();
+  });
   els.tplName.addEventListener('input', e => { if (draft) { draft.name = e.target.value; drawEditor(); } });
   els.tplGroup.addEventListener('change', e => { if (draft) { draft.groupId = e.target.value; drawEditor(); } });
   els.tplBg1.addEventListener('input', e => {
