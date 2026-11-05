@@ -301,12 +301,13 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
 .result-img-wrap{
   flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
   padding:16px 12px;overflow:auto;
-  -webkit-user-select:none;user-select:none;-webkit-touch-callout:default;
+  -webkit-touch-callout:default;
 }
 .result-img-wrap img{
   max-width:100%;max-height:calc(100vh - 190px);height:auto;width:auto;
   border-radius:10px;box-shadow:0 30px 70px -20px rgba(0,0,0,.85);
   background:#fff;display:block;
+  -webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;
 }
 .result-foot{
   display:flex;gap:10px;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
@@ -665,7 +666,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
 <dialog id="resultDialog" class="result-dialog">
   <div class="result-hint">
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v7.17l2.59-2.59a1 1 0 1 1 1.42 1.42l-4.3 4.3a1 1 0 0 1-1.42 0l-4.3-4.3a1 1 0 1 1 1.42-1.42L11 10.17V3a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/></svg>
-    <span><b>长按下方图片</b>即可保存到手机相册</span>
+    <span><b>长按下方图片</b>选择保存图片；微信中如保存失败，请点“下载 PNG 文件”</span>
   </div>
   <div class="result-img-wrap">
     <img id="resultImg" alt="拍立得照片">
@@ -1828,15 +1829,18 @@ function saveBlob(blob, filename){
 
 function openResultDialog(blob, filename){
   if (els.resultDialog.open) return;
-  const url = URL.createObjectURL(blob);
-  els.resultImg.src = url;
-  els.resultDownload.dataset.filename = filename || '拍立得.png';
-  els.resultDialog.showModal();
-  els.resultDialog.addEventListener('close', function once(){
-    URL.revokeObjectURL(url);
-    els.resultImg.removeAttribute('src');
-    els.resultDialog.removeEventListener('close', once);
-  });
+  const reader = new FileReader();
+  reader.onload = () => {
+    els.resultImg.src = reader.result;
+    els.resultDownload.dataset.filename = filename || '拍立得.png';
+    els.resultDialog.showModal();
+    els.resultDialog.addEventListener('close', function once(){
+      els.resultImg.removeAttribute('src');
+      els.resultDialog.removeEventListener('close', once);
+    });
+  };
+  reader.onerror = () => toast('图片预览失败，请重试');
+  reader.readAsDataURL(blob);
 }
 
 async function saveCurrent(){
