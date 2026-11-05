@@ -282,6 +282,39 @@ dialog{
   box-shadow:0 44px 80px -30px rgba(18,24,28,.7);color:var(--ink);overflow:hidden;
 }
 dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
+
+/* ---------- 结果预览（长按保存） ---------- */
+.result-dialog{
+  width:100%;max-width:100%;height:auto;border:0;border-radius:0;background:#1a222b;color:#f6efdf;
+  padding:0;display:flex;flex-direction:column;align-items:stretch;overflow:hidden;
+  box-shadow:none;position:fixed;inset:auto;top:0;bottom:0;left:0;right:0;z-index:80;
+}
+.result-dialog::backdrop{background:rgba(10,14,18,.88);backdrop-filter:blur(12px)}
+.result-dialog[open]{align-self:stretch}
+.result-hint{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:16px 18px 12px;color:#ffd26a;font-size:15px;font-weight:500;text-align:center;
+  background:linear-gradient(180deg,rgba(255,210,106,.18),transparent);
+  border-bottom:1px dashed rgba(255,255,255,.14);
+}
+.result-hint b{color:#fff;font-weight:700;letter-spacing:.02em}
+.result-img-wrap{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  padding:16px 12px;overflow:auto;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:default;
+}
+.result-img-wrap img{
+  max-width:100%;max-height:calc(100vh - 190px);height:auto;width:auto;
+  border-radius:10px;box-shadow:0 30px 70px -20px rgba(0,0,0,.85);
+  background:#fff;display:block;
+}
+.result-foot{
+  display:flex;gap:10px;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+  border-top:1px dashed rgba(255,255,255,.14);background:rgba(10,14,18,.6);
+  flex-wrap:wrap;
+}
+.result-foot .btn{flex:1}
+
 .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 22px;border-bottom:2px dashed rgba(32,42,51,.18);background:linear-gradient(180deg,var(--paper),#fbf3e4)}
 .dialog-head h2{font-family:var(--display);font-weight:400;font-size:22px;margin:0;letter-spacing:.02em}
 .dialog-head .close{width:32px;height:32px;border-radius:50%;border:2px solid var(--ink);background:var(--paper);font-size:16px;line-height:1;transition:transform .15s,background .15s}
@@ -627,6 +660,21 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   </div>
 </dialog>
 
+<!-- 导出结果：全屏预览 + 长按保存引导（手机端相册入径） -->
+<dialog id="resultDialog" class="result-dialog">
+  <div class="result-hint">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v7.17l2.59-2.59a1 1 0 1 1 1.42 1.42l-4.3 4.3a1 1 0 0 1-1.42 0l-4.3-4.3a1 1 0 1 1 1.42-1.42L11 10.17V3a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/></svg>
+    <span><b>长按下方图片</b>即可保存到手机相册</span>
+  </div>
+  <div class="result-img-wrap">
+    <img id="resultImg" alt="拍立得照片">
+  </div>
+  <div class="result-foot">
+    <button class="btn" id="resultDownload">电脑下载 PNG</button>
+    <button class="btn primary" data-close>完成</button>
+  </div>
+</dialog>
+
 <div id="toast"></div>
 
 <script>
@@ -750,6 +798,9 @@ const els = {
   groupRows: $('groupRows'),
   newGroupName: $('newGroupName'),
   addGroupBtn: $('addGroupBtn'),
+  resultDialog: $('resultDialog'),
+  resultImg: $('resultImg'),
+  resultDownload: $('resultDownload'),
   toast: $('toast')
 };
 
@@ -1763,28 +1814,57 @@ function dataURLToBlob(dataURL){
   return new Blob([arr], { type: mime });
 }
 
-function canShareFiles(){
-  return IS_TOUCH && !!navigator.canShare && !!navigator.share;
+function canvasToDataURL(cv){
+  return cv.toDataURL('image/png');
+}
+
+function supportsShareFiles(){
+  return !!(navigator.canShare && navigator.share);
 }
 
 async function saveBlob(blob, filename, title){
-  if (canShareFiles()) {
+  // ① 优先走 Web Share API（桌面 Chrome / Android Chrome 支持 files）
+  if (supportsShareFiles()) {
     try {
       const file = new File([blob], filename, { type: blob.type || 'image/png' });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: title || '拍立得照片', text: '用拍立得暗房制作，带相框的照片' });
-        toast('已打开系统保存 / 分享面板');
-        return true;
+        await navigator.share({ files: [file], title: title || '拍立得照片', text: '拍立得暗房 · 带相框的照片' });
+        toast('已打开系统分享面板');
+        return;
       }
     } catch (err) {
-      if (err && err.name === 'AbortError') return false;
+      if (err && err.name === 'AbortError') return; // 用户取消分享，静默
+      // 能力声明支持但实际失败（iOS 常见）→ 继续走长按方案
     }
   }
+
+  // ② 电脑端：直接下载到本地
+  if (!IS_TOUCH) {
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, filename);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('已开始下载');
+    return;
+  }
+
+  // ③ 手机端（iOS Safari 必命中此分支）：弹全屏预览，引导长按保存到相册
+  openResultDialog(blob, filename, els);
+}
+
+function openResultDialog(blob, filename, els){
+  els = els || {};
   const url = URL.createObjectURL(blob);
-  triggerDownload(url, filename);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast('已导出图片，可在相册中查看');
-  return true;
+  if (els.resultImg) els.resultImg.src = url;
+  if (els.resultDownload) els.resultDownload.dataset.filename = filename || '拍立得.png';
+  if (els.resultDialog && !els.resultDialog.open) {
+    els.resultDialog.showModal();
+    // dialog 关闭时释放 object URL，避免内存泄漏
+    els.resultDialog.addEventListener('close', function once(){
+      URL.revokeObjectURL(url);
+      if (els.resultImg) els.resultImg.removeAttribute('src');
+      els.resultDialog.removeEventListener('close', once);
+    });
+  }
 }
 
 async function saveCurrent(){
@@ -2095,6 +2175,23 @@ function bindEvents(){
     });
   });
 
+  // 结果预览：电脑下载 PNG（兜底，不走长按）
+  if (els.resultDownload) {
+    els.resultDownload.addEventListener('click', () => {
+      const url = els.resultImg.src;
+      const fname = els.resultDownload.dataset.filename || '拍立得.png';
+      if (url && url.startsWith('blob:')) {
+        triggerDownload(url, fname);
+      } else {
+        // 兜底：如果 src 是 dataURL
+        const a = document.createElement('a');
+        a.href = url; a.download = fname;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      toast('已发送到浏览器下载');
+    });
+  }
+
   // 画布拖拽 / 双指缩放
   const pointers = new Map();
   let pinch = null;
@@ -2193,8 +2290,8 @@ function init(){
   els.tplSizeVal.textContent = '44';
   setRangeFill(els.tplSize);
   if (IS_TOUCH) {
-    els.downloadBtn.textContent = '保存照片到手机';
-    els.exportBtn.textContent = '保存照片';
+    els.downloadBtn.textContent = '保存到相册';
+    els.exportBtn.textContent = '保存到相册';
   }
 
   renderTemplates();
