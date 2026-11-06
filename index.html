@@ -98,8 +98,7 @@ button{cursor:pointer}
 
 /* ---------- 布局 ---------- */
 .workspace{
-  display:grid;grid-template-columns:minmax(0,1.1fr) minmax(400px,.9fr);gap:22px;
-  max-width:1400px;margin:0 auto;padding:22px 32px 0;position:relative;z-index:2;
+  display:block;max-width:760px;margin:0 auto;padding:22px 32px 0;position:relative;z-index:2;
 }
 .col-left,.col-right{display:flex;flex-direction:column;gap:22px;min-width:0}
 .panel{
@@ -163,6 +162,8 @@ button{cursor:pointer}
 }
 .stage-card.dragover{box-shadow:0 0 0 4px var(--yellow) inset,0 26px 55px -26px rgba(18,24,28,.75)}
 .stage-card.dragover .stage-hint{color:var(--yellow)}
+.photo-controls{background:var(--paper);border:2px solid var(--ink);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow-panel);display:flex;flex-direction:column;gap:12px}
+.photo-controls>.fine{font-weight:700;color:var(--ink)}
 
 /* ---------- 表单 ---------- */
 .field{display:flex;flex-direction:column;gap:6px;font-size:12.5px;font-weight:500;color:var(--ink-soft)}
@@ -203,6 +204,12 @@ button{cursor:pointer}
 /* ---------- 模板 ---------- */
 .templates{display:flex;flex-direction:column;max-height:min(72vh,780px)}
 .templates .panel-head{flex:none}
+#frameDialog{width:min(760px,94vw)}
+#frameDialog .templates{max-height:min(84vh,880px);border:0;box-shadow:none;border-radius:0}
+#frameDialog .group-list{overflow-y:auto;padding-right:6px}
+#frameDialog .panel-foot{align-items:center}
+#frameDialog .panel-foot .btn{margin-left:auto}
+.visually-hidden-file{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .group-list{overflow-y:auto;padding-right:6px;margin:0 -4px 0 0;flex:1;min-height:0}
 .group-list::-webkit-scrollbar{width:8px}
 .group-list::-webkit-scrollbar-thumb{background:rgba(32,42,51,.25);border-radius:99px}
@@ -367,9 +374,8 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
 
 /* ---------- 响应式 ---------- */
 @media (max-width:1080px){
-  .workspace{grid-template-columns:1fr;padding:18px 20px 0}
-  .templates{max-height:none}
-  .group-list{overflow:visible;padding-right:0}
+  .workspace{padding:18px 20px 0}
+  #frameDialog .group-list{overflow-y:auto;padding-right:6px}
   .tpl-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .album{grid-column:1}
   .topbar{padding:12px 20px}
@@ -410,6 +416,10 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   .album-item{width:106px}
   .page-foot{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
   dialog{inset:0;margin:0;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;border:0;border-radius:0}
+  #frameDialog{width:100%;max-width:100%}
+  #frameDialog .templates{height:100%;max-height:none;padding:14px}
+  #frameDialog .group-list{min-height:0;overflow-y:auto}
+  #frameDialog .panel-foot .btn{width:100%;margin-left:0}
   .result-dialog{height:100vh;height:100dvh}
   .dialog-head{padding:14px 16px}
   .dialog-head h2{font-size:19px}
@@ -451,7 +461,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   </div>
   <div class="topbar-actions">
     <span class="chip">真实尺寸 <b>88 × 107 mm</b></span>
-    <button class="btn ghost" id="manageGroupsBtn">✎ 分组管理</button>
+    <button class="btn ghost" id="manageGroupsBtn">▦ 边框选择</button>
     <button class="btn primary" id="exportBtn" disabled>导出 PNG</button>
   </div>
 </header>
@@ -474,13 +484,8 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head">
-        <span class="step">02</span>
-        <h2>照片与文案</h2>
-        <span class="spacer"></span>
-        <span class="count-badge">JPG / PNG / WEBP</span>
-      </div>
+    <div class="photo-controls" aria-label="照片操作">
+      <span class="fine">照片操作 · JPG / PNG / WEBP</span>
       <div class="upload-row">
         <button class="btn primary" id="uploadBtn">＋ 选择照片</button>
         <span class="file-meta" id="fileMeta">尚未载入 · 也可以直接拖进上方暗房</span>
@@ -501,28 +506,33 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
         </label>
       </div>
       <div class="action-row">
-        <button class="btn ghost" id="addAlbumBtn" disabled>加入相册</button>
         <button class="btn primary" id="downloadBtn" disabled>导出当前 PNG</button>
       </div>
     </div>
   </div>
 
-  <aside class="col-right">
+</main>
+
+<dialog id="frameDialog" aria-label="边框选择">
     <div class="panel templates">
       <div class="panel-head">
-        <span class="step">03</span>
-        <h2>相框模板</h2>
+        <h2>边框选择</h2>
         <span class="spacer"></span>
         <span class="count-badge" id="tplCount">11 款</span>
         <button class="mini" id="newTplBtn" title="新建相框" style="margin-left:2px">＋</button>
+        <button class="close" data-close aria-label="关闭边框选择">×</button>
       </div>
       <div class="group-list" id="groupList"></div>
       <div class="panel-foot">
         <button class="link-btn" id="manageGroupsBtn2">✎ 编辑分组</button>
         <button class="link-btn" id="resetTplBtn">↺ 恢复初始模板</button>
+        <button class="btn sm primary" id="customFrameBtn">＋ 上传自定义边框</button>
+        <input type="file" id="customFrameInput" accept="image/*" class="visually-hidden-file" aria-label="上传自定义边框图片">
       </div>
     </div>
+</dialog>
 
+<div hidden>
     <div class="panel tip">
       <h3>冲印须知</h3>
       <ul>
@@ -547,7 +557,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
       <div class="album-empty"><strong>还没有冲印的照片</strong>上传一张照片，套上喜欢的相框，然后点击「加入相册」。你的宝可梦时刻会整齐地排在这里。</div>
     </div>
   </section>
-</main>
+</div>
 
 <footer class="page-foot">拍立得暗房 <b>POLAROID DARKROOM</b> · 本地运行 · 数据仅保存在你的浏览器</footer>
 
@@ -779,11 +789,13 @@ const els = {
   resetBtn: $('resetBtn'),
   removeBtn: $('removeBtn'),
   captionInput: $('captionInput'),
-  addAlbumBtn: $('addAlbumBtn'),
   downloadBtn: $('downloadBtn'),
   exportBtn: $('exportBtn'),
   tplCount: $('tplCount'),
   groupList: $('groupList'),
+  frameDialog: $('frameDialog'),
+  customFrameBtn: $('customFrameBtn'),
+  customFrameInput: $('customFrameInput'),
   newTplBtn: $('newTplBtn'),
   resetTplBtn: $('resetTplBtn'),
   manageGroupsBtn: $('manageGroupsBtn'),
@@ -1426,7 +1438,7 @@ function getFrameImage(tpl){
   let img = frameImages.get(tpl.frameImage);
   if (img) return img;
   img = new Image();
-  img.onload = () => { redrawMain(); refreshThumbs(); drawEditor(); };
+  img.onload = () => { if (currentTpl().frameImage === tpl.frameImage) redrawMain(); refreshThumbs(); drawEditor(); };
   frameImages.set(tpl.frameImage, img);
   img.src = tpl.frameImage;
   return img;
@@ -1509,7 +1521,8 @@ function redrawMain(){
 }
 
 function refreshThumbs(){
-  const nodes = document.querySelectorAll('canvas[data-thumb]');
+  if (!els.frameDialog.open) return;
+  const nodes = els.groupList.querySelectorAll('canvas[data-thumb]');
   nodes.forEach(cv => {
     const t = state.templates.find(x => x.id === cv.dataset.thumb);
     if (t) renderPolaroid(cv, t, { image: state.image, tf: state.tf, caption: t.caption, mode: 'thumb' });
@@ -1526,6 +1539,7 @@ function scheduleMainRedraw(){
 
 /* ================= 模板列表 ================= */
 function renderTemplates(){
+  if (!els.frameDialog.open) return;
   const list = els.groupList;
   list.innerHTML = '';
   state.groups.forEach(g => {
@@ -1670,15 +1684,12 @@ function updateFrameImageMeta(){
   els.frameImageRemove.hidden = !draft || !draft.frameImage;
 }
 
-function uploadFrameImage(file){
-  if (!draft) return;
+function prepareFrameImage(file, onReady){
   if (!file.type.startsWith('image/')) { toast('请选择图片文件'); return; }
-  const target = draft;
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
     URL.revokeObjectURL(url);
-    if (draft !== target) return;
     try {
       const cv = document.createElement('canvas');
       cv.width = DESIGN.W;
@@ -1687,21 +1698,61 @@ function uploadFrameImage(file){
       const scale = Math.max(DESIGN.W / img.naturalWidth, DESIGN.H / img.naturalHeight);
       const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
       ctx.drawImage(img, (DESIGN.W - w) / 2, (DESIGN.H - h) / 2, w, h);
-      target.frameImage = cv.toDataURL('image/jpeg', .82);
-      target.frameImageName = file.name;
-      frameImages.set(target.frameImage, imgForFrame(target.frameImage));
-      updateFrameImageMeta();
-      drawEditor();
-      toast('边框图片已载入，中间照片区已挖空');
+      onReady(cv.toDataURL('image/jpeg', .82));
     } catch (e) { toast('边框图片处理失败，请换一张图片'); }
   };
   img.onerror = () => { URL.revokeObjectURL(url); toast('图片无法读取，请换一张图片'); };
   img.src = url;
 }
 
+function uploadFrameImage(file){
+  if (!draft) return;
+  const target = draft;
+  prepareFrameImage(file, src => {
+    if (draft !== target) return;
+    target.frameImage = src;
+    target.frameImageName = file.name;
+    frameImages.set(src, imgForFrame(src));
+    updateFrameImageMeta();
+    drawEditor();
+    toast('边框图片已载入，中间照片区已挖空');
+  });
+}
+
+function saveUploadedFrame(file){
+  const name = file.name.replace(/\.[^.]+$/, '').trim() || '自定义边框';
+  prepareFrameImage(file, src => {
+    const tpl = clone(currentTpl());
+    tpl.id = uid();
+    tpl.name = name;
+    tpl.caption = '';
+    tpl.pattern = 'none';
+    tpl.motif = 'none';
+    tpl.sticker = '';
+    tpl.texture = false;
+    tpl.groupId = state.groups[0].id;
+    tpl.frameImage = src;
+    tpl.frameImageName = file.name;
+    const previousId = state.currentId;
+    state.templates.push(tpl);
+    state.currentId = tpl.id;
+    if (!saveState()) {
+      state.templates.pop();
+      state.currentId = previousId;
+      return;
+    }
+    frameImages.set(src, imgForFrame(src));
+    updateFrameChip();
+    updateCaptionPlaceholder();
+    redrawMain();
+    els.frameDialog.close();
+    toast('自定义边框已保存');
+  });
+}
+
 function imgForFrame(src){
   const img = new Image();
-  img.onload = () => { redrawMain(); refreshThumbs(); drawEditor(); };
+  img.onload = () => { if (currentTpl().frameImage === src) redrawMain(); refreshThumbs(); drawEditor(); };
   img.src = src;
   return img;
 }
@@ -1818,7 +1869,6 @@ function deleteGroup(id){
 /* ================= 图片处理 ================= */
 function setButtons(){
   const has = !!state.image;
-  els.addAlbumBtn.disabled = !has;
   els.downloadBtn.disabled = !has;
   els.exportBtn.disabled = !has;
   els.stageCanvas.classList.toggle('no-image', !has);
@@ -2089,10 +2139,10 @@ function bindEvents(){
     redrawMain();
   });
 
-  els.addAlbumBtn.addEventListener('click', addToAlbum);
   els.downloadBtn.addEventListener('click', saveCurrent);
   els.exportBtn.addEventListener('click', saveCurrent);
 
+  els.frameDialog.addEventListener('close', () => { els.groupList.innerHTML = ''; });
   els.groupList.addEventListener('click', e => {
     const groupEdit = e.target.closest('[data-group-edit]');
     if (groupEdit) { e.preventDefault(); openGroupDialog(); return; }
@@ -2122,7 +2172,7 @@ function bindEvents(){
       return;
     }
     const card = e.target.closest('.tpl-card');
-    if (card) selectTemplate(card.dataset.id);
+    if (card) { selectTemplate(card.dataset.id); els.frameDialog.close(); }
   });
 
   els.groupList.addEventListener('keydown', e => {
@@ -2131,13 +2181,23 @@ function bindEvents(){
     if (card && e.target === card) {
       e.preventDefault();
       selectTemplate(card.dataset.id);
+      els.frameDialog.close();
     }
   });
 
   els.newTplBtn.addEventListener('click', () => openEditor(null));
   els.resetTplBtn.addEventListener('click', resetTemplates);
-  els.manageGroupsBtn.addEventListener('click', openGroupDialog);
+  els.manageGroupsBtn.addEventListener('click', () => {
+    els.frameDialog.showModal();
+    renderTemplates();
+  });
   els.manageGroupsBtn2.addEventListener('click', openGroupDialog);
+  els.customFrameBtn.addEventListener('click', () => els.customFrameInput.click());
+  els.customFrameInput.addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) saveUploadedFrame(file);
+    e.target.value = '';
+  });
 
   // 模板编辑器字段
   els.frameImageBtn.addEventListener('click', () => els.frameImageInput.click());
@@ -2358,10 +2418,7 @@ function bindEvents(){
     els.stageCanvas._wt = setTimeout(refreshThumbs, 220);
   }, { passive: false });
 
-  window.addEventListener('resize', () => {
-    renderTemplates();
-    redrawMain();
-  });
+  window.addEventListener('resize', scheduleMainRedraw);
 }
 
 /* ================= 初始化 ================= */
@@ -2378,13 +2435,11 @@ function init(){
     els.exportBtn.textContent = '保存到相册';
   }
 
-  renderTemplates();
-  renderAlbum();
   setButtons();
   updateFrameChip();
   updateCaptionPlaceholder();
-  redrawMain();
   bindEvents();
+  requestAnimationFrame(redrawMain);
 }
 
 init();
