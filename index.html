@@ -334,7 +334,11 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
 .dialog-head .close:hover{background:var(--yellow);transform:rotate(90deg)}
 .dialog-body{padding:20px 22px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:24px;max-height:68vh;overflow:auto}
 .editor-preview{display:flex;flex-direction:column;gap:9px;align-self:start;position:sticky;top:0}
-.editor-preview canvas{width:100%;height:auto;border-radius:5px;box-shadow:0 18px 30px -14px rgba(32,42,51,.45);background:#fff}
+.editor-preview canvas{width:100%;height:auto;border-radius:5px;box-shadow:0 18px 30px -14px rgba(32,42,51,.45);background:#fff;touch-action:none;cursor:grab}
+.editor-preview canvas:active{cursor:grabbing}
+.frame-zoom{display:flex;align-items:center;gap:8px;font-size:12px}
+.frame-zoom input{min-width:0;flex:1}
+.frame-zoom output{min-width:40px;text-align:right}
 .editor-preview .mono-note{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--ink-soft);text-align:center}
 .editor-fields{display:grid;grid-template-columns:1fr 1fr;gap:13px 15px;align-content:start;min-width:0}
 .dialog-foot{display:flex;align-items:center;gap:10px;padding:14px 22px;border-top:2px dashed rgba(32,42,51,.18);background:#fbf3e4;flex-wrap:wrap}
@@ -476,7 +480,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
       </div>
       <div class="stage-foot">
         <span class="stage-hint" id="stageHint">拖拽照片可调整构图 · 滚轮或滑块缩放</span>
-        <span class="frame-chip" id="currentFrameName">皮卡丘</span>
+        <span class="frame-chip" id="currentFrameName">胖丁</span>
       </div>
     </div>
 
@@ -564,8 +568,9 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
   </div>
   <div class="dialog-body">
     <div class="editor-preview">
-      <canvas id="editorCanvas" width="480" height="584"></canvas>
-      <div class="mono-note">LIVE PREVIEW · 88 × 107</div>
+      <canvas id="editorCanvas" width="480" height="584" aria-label="拖动边框图片调整位置"></canvas>
+      <label class="frame-zoom" id="frameZoomControls" hidden>边框缩放 <input id="frameZoomRange" type="range" min="50" max="300" value="100"><output id="frameZoomValue">100%</output></label>
+      <div class="mono-note" id="editorHint">LIVE PREVIEW · 88 × 107</div>
     </div>
     <div class="editor-fields">
       <label class="field full">相框名称
@@ -576,7 +581,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
       </label>
       <div class="frame-image-field">
         <strong>上传图片生成边框</strong>
-        <p class="fine">图片将覆盖相框画布，中间照片区会自动挖空；可继续编辑下方文字与图案。</p>
+        <p class="fine">在左侧预览拖动边框图片，使用缩放滑块或双指调整；中间照片区会自动挖空。</p>
         <div class="frame-image-actions">
           <button class="btn sm ghost" type="button" id="frameImageBtn">＋ 选择边框图片</button>
           <button class="btn sm ghost" type="button" id="frameImageRemove" hidden>移除边框图片</button>
@@ -797,6 +802,10 @@ const els = {
   tplDialog: $('tplDialog'),
   tplDialogTitle: $('tplDialogTitle'),
   editorCanvas: $('editorCanvas'),
+  frameZoomControls: $('frameZoomControls'),
+  frameZoomRange: $('frameZoomRange'),
+  frameZoomValue: $('frameZoomValue'),
+  editorHint: $('editorHint'),
   tplName: $('tplName'),
   tplGroup: $('tplGroup'),
   frameImageBtn: $('frameImageBtn'),
@@ -900,9 +909,9 @@ function loadState(){
   if (!loaded) {
     state.groups = clone(DEFAULT_GROUPS);
     state.templates = clone(DEFAULT_TEMPLATES);
-    state.currentId = state.templates[0].id;
+    state.currentId = 't6';
   }
-  if (!state.templates.some(t => t.id === state.currentId)) state.currentId = state.templates[0].id;
+  state.currentId = state.templates.some(t => t.id === 't6') ? 't6' : state.templates[0].id;
   state.templates.forEach(t => {
     if (!state.groups.some(g => g.id === t.groupId)) t.groupId = state.groups[0].id;
     if (!t.motif) t.motif = MOTIF_BY_NAME[t.name] || 'none';
@@ -912,7 +921,7 @@ function resetTemplates(){
   if (!window.confirm('恢复初始的 11 款宝可梦模板？你自定义的相框与分组将被覆盖。')) return;
   state.groups = clone(DEFAULT_GROUPS);
   state.templates = clone(DEFAULT_TEMPLATES);
-  state.currentId = state.templates[0].id;
+  state.currentId = 't6';
   saveState();
   renderTemplates();
   redrawMain();
@@ -1460,7 +1469,13 @@ function renderPolaroid(canvas, tpl, opts){
     ctx.rect(0, 0, DW, DH);
     ctx.rect(DESIGN.M, DESIGN.M, DESIGN.IMG, DESIGN.IMG);
     ctx.clip('evenodd');
-    ctx.drawImage(frameImage, 0, 0, DW, DH);
+    const tf = tpl.frameTf || { zoom: 1, x: 0, y: 0 };
+    const cover = tpl.frameTf
+      ? Math.max(DW / frameImage.naturalWidth, DH / frameImage.naturalHeight)
+      : 0;
+    const fw = cover ? frameImage.naturalWidth * cover * tf.zoom : DW;
+    const fh = cover ? frameImage.naturalHeight * cover * tf.zoom : DH;
+    ctx.drawImage(frameImage, (DW - fw) / 2 + (tf.x || 0), (DH - fh) / 2 + (tf.y || 0), fw, fh);
     ctx.restore();
   }
 
@@ -1602,9 +1617,13 @@ function updateCaptionPlaceholder(){
 }
 
 /* ================= 模板增删改 ================= */
-function openEditor(id){
+function openEditor(id, uploadedDraft){
   editingId = id || null;
-  if (id) {
+  if (uploadedDraft) {
+    draft = uploadedDraft;
+    els.tplDialogTitle.textContent = '编辑自定义边框 · ' + draft.name;
+    els.tplDeleteBtn.style.display = 'none';
+  } else if (id) {
     const t = state.templates.find(x => x.id === id);
     if (!t) return;
     draft = clone(t);
@@ -1673,6 +1692,12 @@ function drawEditor(){
 function updateFrameImageMeta(){
   els.frameImageMeta.textContent = draft && draft.frameImage ? (draft.frameImageName || '已上传边框图片') : '未选择图片';
   els.frameImageRemove.hidden = !draft || !draft.frameImage;
+  els.frameZoomControls.hidden = !draft || !draft.frameImage;
+  els.editorHint.textContent = draft && draft.frameImage ? '拖动图片调整位置 · 滑块 / 双指缩放' : 'LIVE PREVIEW · 88 × 107';
+  if (draft && draft.frameImage) {
+    els.frameZoomRange.value = String(Math.round((draft.frameTf?.zoom || 1) * 100));
+    els.frameZoomValue.textContent = els.frameZoomRange.value + '%';
+  }
 }
 
 function prepareFrameImage(file, onReady){
@@ -1683,13 +1708,11 @@ function prepareFrameImage(file, onReady){
     URL.revokeObjectURL(url);
     try {
       const cv = document.createElement('canvas');
-      cv.width = DESIGN.W;
-      cv.height = DESIGN.H;
-      const ctx = cv.getContext('2d');
-      const scale = Math.max(DESIGN.W / img.naturalWidth, DESIGN.H / img.naturalHeight);
-      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
-      ctx.drawImage(img, (DESIGN.W - w) / 2, (DESIGN.H - h) / 2, w, h);
-      onReady(cv.toDataURL('image/jpeg', .82));
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      cv.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      cv.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      onReady(cv.toDataURL('image/jpeg', .78));
     } catch (e) { toast('边框图片处理失败，请换一张图片'); }
   };
   img.onerror = () => { URL.revokeObjectURL(url); toast('图片无法读取，请换一张图片'); };
@@ -1703,6 +1726,7 @@ function uploadFrameImage(file){
     if (draft !== target) return;
     target.frameImage = src;
     target.frameImageName = file.name;
+    target.frameTf = { zoom: 1, x: 0, y: 0 };
     frameImages.set(src, imgForFrame(src));
     updateFrameImageMeta();
     drawEditor();
@@ -1724,20 +1748,10 @@ function saveUploadedFrame(file){
     tpl.groupId = state.groups[0].id;
     tpl.frameImage = src;
     tpl.frameImageName = file.name;
-    const previousId = state.currentId;
-    state.templates.push(tpl);
-    state.currentId = tpl.id;
-    if (!saveState()) {
-      state.templates.pop();
-      state.currentId = previousId;
-      return;
-    }
+    tpl.frameTf = { zoom: 1, x: 0, y: 0 };
     frameImages.set(src, imgForFrame(src));
-    updateFrameChip();
-    updateCaptionPlaceholder();
-    redrawMain();
     els.frameDialog.close();
-    toast('自定义边框已保存');
+    openEditor(null, tpl);
   });
 }
 
@@ -1760,18 +1774,21 @@ function saveTemplate(){
   } else {
     state.templates = [...state.templates, clone(draft)];
   }
-  state.currentId = draft.id;
+  if (draft.frameImage && !editingId) state.currentId = previousId;
+  else state.currentId = draft.id;
   if (!saveState()) {
     state.templates = previousTemplates;
     state.currentId = previousId;
     return;
   }
-  renderTemplates();
   updateFrameChip();
   updateCaptionPlaceholder();
   redrawMain();
+  const uploaded = !!draft.frameImage && !editingId;
   els.tplDialog.close();
-  toast(editingId ? '相框已更新' : '新相框已加入');
+  if (uploaded && !els.frameDialog.open) els.frameDialog.showModal();
+  renderTemplates();
+  toast(editingId ? '相框已更新' : uploaded ? '相框已保存，请在列表中选择' : '新相框已加入');
 }
 
 function deleteTemplate(){
@@ -2192,8 +2209,66 @@ function bindEvents(){
     if (!draft) return;
     delete draft.frameImage;
     delete draft.frameImageName;
+    delete draft.frameTf;
     updateFrameImageMeta();
     drawEditor();
+  });
+  els.frameZoomRange.addEventListener('input', e => {
+    if (!draft?.frameImage) return;
+    draft.frameTf ||= { zoom: 1, x: 0, y: 0 };
+    draft.frameTf.zoom = Number(e.target.value) / 100;
+    els.frameZoomValue.textContent = e.target.value + '%';
+    drawEditor();
+  });
+  const framePointers = new Map();
+  let frameDrag = null;
+  let framePinch = null;
+  els.editorCanvas.addEventListener('pointerdown', e => {
+    if (!draft?.frameImage) return;
+    framePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { els.editorCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    if (framePointers.size === 1) {
+      framePinch = null;
+      frameDrag = { x: e.clientX, y: e.clientY };
+    } else if (framePointers.size === 2) {
+      frameDrag = null;
+      const [a, b] = [...framePointers.values()];
+      framePinch = { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), zoom: draft.frameTf?.zoom || 1,
+        x: draft.frameTf?.x || 0, y: draft.frameTf?.y || 0,
+        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    }
+  });
+  els.editorCanvas.addEventListener('pointermove', e => {
+    if (!draft?.frameImage || !framePointers.has(e.pointerId)) return;
+    framePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const k = DESIGN.W / els.editorCanvas.getBoundingClientRect().width;
+    draft.frameTf ||= { zoom: 1, x: 0, y: 0 };
+    if (framePinch && framePointers.size >= 2) {
+      const [a, b] = [...framePointers.values()];
+      draft.frameTf.zoom = Math.min(3, Math.max(.5, framePinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / framePinch.distance));
+      draft.frameTf.x = framePinch.x + ((a.x + b.x) / 2 - framePinch.cx) * k;
+      draft.frameTf.y = framePinch.y + ((a.y + b.y) / 2 - framePinch.cy) * k;
+      els.frameZoomRange.value = String(Math.round(draft.frameTf.zoom * 100));
+      els.frameZoomValue.textContent = els.frameZoomRange.value + '%';
+    } else if (frameDrag) {
+      draft.frameTf.x += (e.clientX - frameDrag.x) * k;
+      draft.frameTf.y += (e.clientY - frameDrag.y) * k;
+      frameDrag = { x: e.clientX, y: e.clientY };
+    }
+    drawEditor();
+  });
+  function endFramePointer(e){
+    framePointers.delete(e.pointerId);
+    if (framePointers.size < 2) framePinch = null;
+    const rest = [...framePointers.values()][0];
+    frameDrag = rest ? { x: rest.x, y: rest.y } : null;
+  }
+  els.editorCanvas.addEventListener('pointerup', endFramePointer);
+  els.editorCanvas.addEventListener('pointercancel', endFramePointer);
+  els.tplDialog.addEventListener('close', () => {
+    framePointers.clear();
+    frameDrag = framePinch = null;
+    draft = null;
   });
   els.tplName.addEventListener('input', e => { if (draft) { draft.name = e.target.value; drawEditor(); } });
   els.tplGroup.addEventListener('change', e => { if (draft) { draft.groupId = e.target.value; drawEditor(); } });
