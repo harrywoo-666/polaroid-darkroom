@@ -469,10 +469,6 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
 <main class="workspace">
   <div class="col-left">
     <div class="stage-card" id="stageCard">
-      <div class="stage-top">
-        <span class="stage-label"><i class="led"></i> Darkroom Preview</span>
-        <span class="stage-spec" id="stageSpec">88 × 107 MM · 600 FILM</span>
-      </div>
       <div class="stage" id="stageArea">
         <div class="photo-wrap">
           <canvas id="stageCanvas" width="1320" height="1605"></canvas>
@@ -485,7 +481,6 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
     </div>
 
     <div class="photo-controls" aria-label="照片操作">
-      <span class="fine">照片操作 · JPG / PNG / WEBP</span>
       <div class="upload-row">
         <button class="btn primary" id="uploadBtn">＋ 选择照片</button>
         <span class="file-meta" id="fileMeta">尚未载入 · 也可以直接拖进上方暗房</span>
@@ -496,9 +491,7 @@ dialog::backdrop{background:rgba(18,24,28,.55);backdrop-filter:blur(6px)}
         </label>
       </div>
       <div class="btn-row">
-        <button class="btn ghost sm" id="rotateBtn">↻ 旋转 90°</button>
         <button class="btn ghost sm" id="resetBtn">重置构图</button>
-        <button class="btn ghost sm" id="removeBtn">移除照片</button>
       </div>
       <div class="control-grid" style="margin-top:13px">
         <label class="field full">相片文案（留空则用相框默认文案）
@@ -785,9 +778,7 @@ const els = {
   fileMeta: $('fileMeta'),
   zoomRange: $('zoomRange'),
   zoomVal: $('zoomVal'),
-  rotateBtn: $('rotateBtn'),
   resetBtn: $('resetBtn'),
-  removeBtn: $('removeBtn'),
   captionInput: $('captionInput'),
   downloadBtn: $('downloadBtn'),
   exportBtn: $('exportBtn'),
@@ -2115,13 +2106,6 @@ function bindEvents(){
   });
   els.zoomRange.addEventListener('change', refreshThumbs);
 
-  els.rotateBtn.addEventListener('click', () => {
-    if (!state.image) return;
-    state.tf.rot = ((state.tf.rot || 0) + 90) % 360;
-    redrawMain();
-    refreshThumbs();
-  });
-
   els.resetBtn.addEventListener('click', () => {
     state.tf = { zoom: 1, x: 0, y: 0, rot: 0 };
     els.zoomRange.value = '100';
@@ -2131,8 +2115,6 @@ function bindEvents(){
     refreshThumbs();
     if (state.image) toast('构图已重置');
   });
-
-  els.removeBtn.addEventListener('click', removePhoto);
 
   els.captionInput.addEventListener('input', e => {
     state.caption = e.target.value;
